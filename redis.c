@@ -410,6 +410,7 @@ static void decrbyCommand(redisClient *c);
 static void selectCommand(redisClient *c);
 static void randomkeyCommand(redisClient *c);
 static void keysCommand(redisClient *c);
+static void delkeysCommand(redisClient *c);
 static void dbsizeCommand(redisClient *c);
 static void lastsaveCommand(redisClient *c);
 static void saveCommand(redisClient *c);
@@ -524,6 +525,7 @@ static struct redisCommand cmdTable[] = {
     {"expire",expireCommand,3,REDIS_CMD_INLINE},
     {"expireat",expireatCommand,3,REDIS_CMD_INLINE},
     {"keys",keysCommand,2,REDIS_CMD_INLINE},
+    {"delkeys",delkeysCommand,2,REDIS_CMD_INLINE},
     {"dbsize",dbsizeCommand,1,REDIS_CMD_INLINE},
     {"auth",authCommand,2,REDIS_CMD_INLINE},
     {"ping",pingCommand,1,REDIS_CMD_INLINE},
@@ -1242,7 +1244,7 @@ static void loadServerConfig(char *filename) {
             server.masterport = atoi(argv[2]);
             server.replstate = REDIS_REPL_CONNECT;
         } else if (!strcasecmp(argv[0],"masterauth") && argc == 2) {
-        	server.masterauth = zstrdup(argv[1]);
+                server.masterauth = zstrdup(argv[1]);
         } else if (!strcasecmp(argv[0],"glueoutputbuf") && argc == 2) {
             if ((server.glueoutputbuf = yesnotoi(argv[1])) == -1) {
                 err = "argument must be 'yes' or 'no'"; goto loaderr;
@@ -3011,6 +3013,38 @@ static void keysCommand(redisClient *c) {
     dictReleaseIterator(di);
     lenobj->ptr = sdscatprintf(sdsempty(),"$%lu\r\n",keyslen+(numkeys ? (numkeys-1) : 0));
     addReply(c,shared.crlf);
+}
+
+static void delkeysCommand(redisClient *c) {
+    int deleted = 0;
+    dictIterator *di;
+    dictEntry *de;
+    sds pattern = c->argv[1]->ptr;
+    int plen = sdslen(pattern);
+
+    di = dictGetIterator(c->db->dict);
+    while((de = dictNext(di)) != NULL) {
+        robj *keyobj = dictGetEntryKey(de);
+        sds key = keyobj->ptr;
+        if ((pattern[0] == '*' && pattern[1] == '\0') ||
+            stringmatchlen(pattern,plen,key,sdslen(key),0)) {
+            deleteKey(c->db,keyobj);
+            deleted++;
+        }
+    }
+    dictReleaseIterator(di);
+
+    switch(deleted) {
+    case 0:
+        addReply(c,shared.czero);
+        break;
+    case 1:
+        addReply(c,shared.cone);
+        break;
+    default:
+        addReplySds(c,sdscatprintf(sdsempty(),":%d\r\n",deleted));
+        break;
+    }
 }
 
 static void dbsizeCommand(redisClient *c) {
@@ -5156,13 +5190,13 @@ static int syncWithMaster(void) {
 
     /* AUTH with the master if required. */
     if(server.masterauth) {
-    	snprintf(authcmd, 1024, "AUTH %s\r\n", server.masterauth);
-    	if (syncWrite(fd, authcmd, strlen(server.masterauth)+7, 5) == -1) {
+        snprintf(authcmd, 1024, "AUTH %s\r\n", server.masterauth);
+        if (syncWrite(fd, authcmd, strlen(server.masterauth)+7, 5) == -1) {
             close(fd);
             redisLog(REDIS_WARNING,"Unable to AUTH to MASTER: %s",
                 strerror(errno));
             return REDIS_ERR;
-    	}
+        }
         /* Read the AUTH result.  */
         if (syncReadLine(fd,buf,1024,3600) == -1) {
             close(fd);

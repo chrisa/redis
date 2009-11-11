@@ -65,6 +65,7 @@ static struct redisFunctionSym symsTable[] = {
 {"initServerConfig",(unsigned long)initServerConfig},
 {"isStringRepresentableAsLong",(unsigned long)isStringRepresentableAsLong},
 {"keysCommand",(unsigned long)keysCommand},
+{"delkeysCommand",(unsigned long)delkeysCommand},
 {"lastsaveCommand",(unsigned long)lastsaveCommand},
 {"lindexCommand",(unsigned long)lindexCommand},
 {"llenCommand",(unsigned long)llenCommand},

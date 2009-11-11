@@ -100,6 +100,17 @@ proc main {server port} {
         $r dbsize
     } {0}
 
+    test {DELKEYS} {
+        foreach key {key_x key_y key_z foo_a foo_b} {
+            $r set $key hello
+        }
+        $r delkeys foo_*
+    } {2}
+
+    test {DELKEYS all keys} {
+        $r delkeys *
+    } {3}
+
     test {Very big payload in GET/SET} {
         set buf [string repeat "abcd" 1000000]
         $r set foo $buf
