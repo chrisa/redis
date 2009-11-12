@@ -411,6 +411,7 @@ static void selectCommand(redisClient *c);
 static void randomkeyCommand(redisClient *c);
 static void keysCommand(redisClient *c);
 static void delkeysCommand(redisClient *c);
+static void delmkeysCommand(redisClient *c);
 static void dbsizeCommand(redisClient *c);
 static void lastsaveCommand(redisClient *c);
 static void saveCommand(redisClient *c);
@@ -526,6 +527,7 @@ static struct redisCommand cmdTable[] = {
     {"expireat",expireatCommand,3,REDIS_CMD_INLINE},
     {"keys",keysCommand,2,REDIS_CMD_INLINE},
     {"delkeys",delkeysCommand,2,REDIS_CMD_INLINE},
+    {"delmkeys",delmkeysCommand,-2,REDIS_CMD_INLINE},
     {"dbsize",dbsizeCommand,1,REDIS_CMD_INLINE},
     {"auth",authCommand,2,REDIS_CMD_INLINE},
     {"ping",pingCommand,1,REDIS_CMD_INLINE},
@@ -3031,6 +3033,44 @@ static void delkeysCommand(redisClient *c) {
             deleteKey(c->db,keyobj);
             deleted++;
         }
+    }
+    dictReleaseIterator(di);
+
+    switch(deleted) {
+    case 0:
+        addReply(c,shared.czero);
+        break;
+    case 1:
+        addReply(c,shared.cone);
+        break;
+    default:
+        addReplySds(c,sdscatprintf(sdsempty(),":%d\r\n",deleted));
+        break;
+    }
+}
+
+static void delmkeysCommand(redisClient *c) {
+    int deleted = 0, j;
+    dictIterator *di;
+    dictEntry *de;
+
+    di = dictGetIterator(c->db->dict);
+    while((de = dictNext(di)) != NULL) {
+        robj *keyobj = dictGetEntryKey(de);
+        sds key = keyobj->ptr;
+	int match = 1;
+	for (j = 1; j < c->argc; j++) {
+	    sds pattern = c->argv[j]->ptr;
+	    int plen = sdslen(pattern);
+	    if (!((pattern[0] == '*' && pattern[1] == '\0') ||
+		  stringmatchlen(pattern,plen,key,sdslen(key),0))) {
+		match = 0;
+	    }
+	}
+	if (match) {
+	    deleteKey(c->db,keyobj);
+	    deleted++;
+	}
     }
     dictReleaseIterator(di);
 

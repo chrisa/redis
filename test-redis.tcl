@@ -111,6 +111,24 @@ proc main {server port} {
         $r delkeys *
     } {3}
 
+    test {DELMKEYS none} {
+        foreach key {key_x key_y key_z foo_x foo_y} {
+            $r set $key hello
+        }
+        $r delmkeys foo_* *_z
+    } {0}
+
+    test {DELMKEYS} {
+        foreach key {key_x key_y key_z foo_x foo_y} {
+            $r set $key hello
+        }
+        $r delmkeys foo_* *_y
+    } {1}
+
+    test {DELMKEYS all keys} {
+        $r delmkeys * 
+    } {4}
+
     test {Very big payload in GET/SET} {
         set buf [string repeat "abcd" 1000000]
         $r set foo $buf
