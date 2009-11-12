@@ -111,17 +111,26 @@ proc main {server port} {
         $r delkeys *
     } {3}
 
-    test {DELMKEYS none} {
+    test {MKEYS none} {
         foreach key {key_x key_y key_z foo_x foo_y} {
             $r set $key hello
         }
+        $r mkeys foo_* *_z
+    } {}
+
+    test {MKEYS} {
+        $r mkeys foo_* *_y
+    } {foo_y}
+
+    test {MKEYS all keys} {
+        lsort [$r mkeys *]
+    } {foo_x foo_y key_x key_y key_z}
+
+    test {DELMKEYS none} {
         $r delmkeys foo_* *_z
     } {0}
 
     test {DELMKEYS} {
-        foreach key {key_x key_y key_z foo_x foo_y} {
-            $r set $key hello
-        }
         $r delmkeys foo_* *_y
     } {1}
 

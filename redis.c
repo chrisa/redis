@@ -410,6 +410,7 @@ static void decrbyCommand(redisClient *c);
 static void selectCommand(redisClient *c);
 static void randomkeyCommand(redisClient *c);
 static void keysCommand(redisClient *c);
+static void mkeysCommand(redisClient *c);
 static void delkeysCommand(redisClient *c);
 static void delmkeysCommand(redisClient *c);
 static void dbsizeCommand(redisClient *c);
@@ -526,6 +527,7 @@ static struct redisCommand cmdTable[] = {
     {"expire",expireCommand,3,REDIS_CMD_INLINE},
     {"expireat",expireatCommand,3,REDIS_CMD_INLINE},
     {"keys",keysCommand,2,REDIS_CMD_INLINE},
+    {"mkeys",mkeysCommand,-2,REDIS_CMD_INLINE},
     {"delkeys",delkeysCommand,2,REDIS_CMD_INLINE},
     {"delmkeys",delmkeysCommand,-2,REDIS_CMD_INLINE},
     {"dbsize",dbsizeCommand,1,REDIS_CMD_INLINE},
@@ -3011,6 +3013,42 @@ static void keysCommand(redisClient *c) {
                 keyslen += sdslen(key);
             }
         }
+    }
+    dictReleaseIterator(di);
+    lenobj->ptr = sdscatprintf(sdsempty(),"$%lu\r\n",keyslen+(numkeys ? (numkeys-1) : 0));
+    addReply(c,shared.crlf);
+}
+
+static void mkeysCommand(redisClient *c) {
+    dictIterator *di;
+    dictEntry *de;
+    int numkeys = 0, keyslen = 0, j;
+    robj *lenobj = createObject(REDIS_STRING,NULL);
+
+    di = dictGetIterator(c->db->dict);
+    addReply(c,lenobj);
+    decrRefCount(lenobj);
+    while((de = dictNext(di)) != NULL) {
+        robj *keyobj = dictGetEntryKey(de);
+        sds key = keyobj->ptr;
+	int match = 1;
+	for (j = 1; j < c->argc; j++) {
+	    sds pattern = c->argv[j]->ptr;
+	    int plen = sdslen(pattern);
+	    if (!((pattern[0] == '*' && pattern[1] == '\0') ||
+		  stringmatchlen(pattern,plen,key,sdslen(key),0))) {
+		match = 0;
+	    }
+	}
+	if (match) {
+	    if (expireIfNeeded(c->db,keyobj) == 0) {
+		if (numkeys != 0)
+		    addReply(c,shared.space);
+		addReply(c,keyobj);
+		numkeys++;
+		keyslen += sdslen(key);
+	    }
+	}
     }
     dictReleaseIterator(di);
     lenobj->ptr = sdscatprintf(sdsempty(),"$%lu\r\n",keyslen+(numkeys ? (numkeys-1) : 0));
